@@ -1,0 +1,43 @@
+stages:
+  get_data:
+    cmd: python data/get_data.py
+    deps:
+      - data/get_data.py
+    outs:
+      - data/raw/titanic.csv
+
+  preprocess:
+    cmd: python src/preprocess_spark.py --input data/raw/titanic.csv --outdir data/processed
+    deps:
+      - src/preprocess_spark.py
+      - data/raw/titanic.csv
+      - params.yaml
+    outs:
+      - data/processed/train.parquet
+      - data/processed/test.parquet
+      - artifacts/train_feature_stats.json
+
+  train:
+    cmd: python src/train_spark_mlflow.py --train data/processed/train.parquet --test data/processed/test.parquet
+    deps:
+      - src/train_spark_mlflow.py
+      - data/processed/train.parquet
+      - data/processed/test.parquet
+      - params.yaml
+    outs:
+      - artifacts/best_run.json
+
+  evaluate:
+    cmd: python src/evaluate.py --test data/processed/test.parquet
+    deps:
+      - src/evaluate.py
+      - data/processed/test.parquet
+      - artifacts/best_run.json
+    metrics:
+      - metrics.json
+
+  register:
+    cmd: python src/register_model.py
+    deps:
+      - src/register_model.py
+      - artifacts/best_run.json

@@ -1,0 +1,11 @@
+mlflow
+dvc
+pyspark
+fastapi
+uvicorn[standard]
+pandas
+numpy
+scikit-learn
+matplotlib
+seaborn
+pyyaml

@@ -1,0 +1,15 @@
+seed: 42
+train:
+  max_iter: 50
+  regParam: [0.0, 0.01, 0.1]
+  elasticNetParam: [0.0, 0.5, 1.0]
+  cv_folds: 3
+  label_col: Survived
+  features:
+    - Pclass
+    - Sex
+    - Age
+    - SibSp
+    - Parch
+    - Fare
+    - Embarked
