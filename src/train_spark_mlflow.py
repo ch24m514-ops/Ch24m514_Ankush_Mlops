@@ -1,71 +1,71 @@
-import argparse, json, os, yaml, mlflow, mlflow.spark
-from pyspark.sql import SparkSession
-from pyspark.ml.classification import LogisticRegression
-from pyspark.ml.tuning import ParamGridBuilder, CrossValidator
-from pyspark.ml.evaluation import BinaryClassificationEvaluator
-
-MODEL_NAME = "titanic_model"
+import argparse
+import os
+import pandas as pd
+import mlflow
+import mlflow.sklearn
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
+import joblib
+import json
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--train", required=True)
-    ap.add_argument("--test", required=True)
-    args = ap.parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--train", required=True, help="Path to train parquet file")
+    parser.add_argument("--test", required=True, help="Path to test parquet file")
+    parser.add_argument("--outdir", required=True, help="Directory to save artifacts")
+    args = parser.parse_args()
 
-    with open("params.yaml") as f:
-        params = yaml.safe_load(f)
-    label_col = params["train"]["label_col"]
+    # ---- Load processed data ----
+    print(f"📂 Loading train data from {args.train}")
+    train_df = pd.read_parquet(args.train)
 
-    spark = SparkSession.builder.appName("titanic-train").getOrCreate()
+    print(f"📂 Loading test data from {args.test}")
+    test_df = pd.read_parquet(args.test)
 
-    # MLflow tracking
-    mlflow.set_tracking_uri("sqlite:///mlflow.db")
-    mlflow.set_experiment("titanic_spark")
+    X_train = train_df.drop("Survived", axis=1)
+    y_train = train_df["Survived"]
+    X_test = test_df.drop("Survived", axis=1)
+    y_test = test_df["Survived"]
 
-    train = spark.read.parquet(args.train)
-    test  = spark.read.parquet(args.test)
+    # ---- Train model ----
+    model = LogisticRegression(max_iter=1000)
+    model.fit(X_train, y_train)
 
-    lr = LogisticRegression(featuresCol="features", labelCol=label_col, maxIter=params["train"]["max_iter"])
+    # ---- Evaluate ----
+    y_pred = model.predict(X_test)
+    acc = accuracy_score(y_test, y_pred)
+    f1 = f1_score(y_test, y_pred)
+    cm = confusion_matrix(y_test, y_pred)
 
-    grid = (
-        ParamGridBuilder()
-        .addGrid(lr.regParam, [float(x) for x in params["train"]["regParam"]])
-        .addGrid(lr.elasticNetParam, [float(x) for x in params["train"]["elasticNetParam"]])
-        .build()
-    )
+    print(f"✅ Accuracy: {acc:.4f}, F1: {f1:.4f}")
+    print("Confusion Matrix:\n", cm)
 
-    evaluator = BinaryClassificationEvaluator(labelCol=label_col, metricName="areaUnderROC")
-
-    cv = CrossValidator(
-        estimator=lr,
-        estimatorParamMaps=grid,
-        evaluator=evaluator,
-        numFolds=int(params["train"]["cv_folds"]),
-        parallelism=2,
-        seed=42
-    )
-
+    # ---- Log with MLflow ----
+    mlflow.set_experiment("titanic-mlops")
     with mlflow.start_run() as run:
-        cv_model = cv.fit(train)
-        best = cv_model.bestModel
-        auc_train = evaluator.evaluate(best.transform(train))
-        auc_test  = evaluator.evaluate(best.transform(test))
+        mlflow.log_param("model", "LogisticRegression")
+        mlflow.log_metric("accuracy", acc)
+        mlflow.log_metric("f1_score", f1)
+        mlflow.sklearn.log_model(model, "model")
 
-        mlflow.log_param("algorithm", "Spark-LogisticRegression")
-        mlflow.log_metric("auc_train", auc_train)
-        mlflow.log_metric("auc_test", auc_test)
+        # ---- Save model locally ----
+        os.makedirs(args.outdir, exist_ok=True)
+        model_path = os.path.join(args.outdir, "model.joblib")
+        joblib.dump(model, model_path)
+        print(f"📦 Model saved to {model_path}")
 
-        # Log the Spark model
-        mlflow.spark.log_model(best, artifact_path="model", registered_model_name=MODEL_NAME)
+        # ---- Save best run metadata for evaluate stage ----
+        best_run_info = {
+            "run_id": run.info.run_id,
+            "experiment_id": mlflow.get_experiment_by_name("titanic-mlops").experiment_id,
+            "metrics": {"accuracy": acc, "f1_score": f1},
+            "model_path": model_path
+        }
+        best_run_path = os.path.join(args.outdir, "best_run.json")
+        with open(best_run_path, "w") as f:
+            json.dump(best_run_info, f, indent=4)
 
-        # Save run info for downstream stages
-        os.makedirs("artifacts", exist_ok=True)
-        with open("artifacts/best_run.json","w") as f:
-            json.dump({"run_id": run.info.run_id, "experiment_id": run.info.experiment_id}, f)
-
-        print(f"Logged to MLflow. AUC train={auc_train:.4f}, test={auc_test:.4f}")
-
-    spark.stop()
+        print(f"📝 Best run info saved to {best_run_path}")
 
 if __name__ == "__main__":
     main()

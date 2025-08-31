@@ -1,32 +1,45 @@
-import argparse, json, mlflow
-from pyspark.sql import SparkSession
-from pyspark.ml.evaluation import BinaryClassificationEvaluator
+import argparse
+import pandas as pd
+import joblib
+from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
+import json
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--test", required=True)
-    args = ap.parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--test", required=True, help="Path to test parquet file")
+    args = parser.parse_args()
 
-    spark = SparkSession.builder.appName("titanic-eval").getOrCreate()
-    with open("artifacts/best_run.json") as f:
-        info = json.load(f)
+    # Load best run info
+    with open("artifacts/best_run.json", "r") as f:
+        best_run = json.load(f)
 
-    mlflow.set_tracking_uri("sqlite:///mlflow.db")
-    run_id = info["run_id"]
-    model_uri = f"runs:/{run_id}/model"
+    model_path = best_run["model_path"]
+    print(f"📂 Loading model from {model_path}")
+    model = joblib.load(model_path)
 
-    # Load spark model via MLflow
-    model = mlflow.spark.load_model(model_uri)
-    test = spark.read.parquet(args.test)
+    test_df = pd.read_parquet(args.test)
+    X_test = test_df.drop("Survived", axis=1)
+    y_test = test_df["Survived"]
 
-    evaluator = BinaryClassificationEvaluator(labelCol="Survived", metricName="areaUnderROC")
-    auc = evaluator.evaluate(model.transform(test))
+    y_pred = model.predict(X_test)
+    acc = accuracy_score(y_test, y_pred)
+    f1 = f1_score(y_test, y_pred)
+    cm = confusion_matrix(y_test, y_pred)
 
-    with open("metrics.json","w") as f:
-        json.dump({"auc_test": auc}, f, indent=2)
+    print(f"📊 Evaluation Results")
+    print(f"✅ Accuracy: {acc:.4f}, F1: {f1:.4f}")
+    print("Confusion Matrix:\n", cm)
 
-    spark.stop()
-    print(f"Evaluation complete. AUC={auc:.4f} (written to metrics.json)")
+    # ---- Save metrics for DVC ----
+    metrics = {
+        "accuracy": round(acc, 4),
+        "f1_score": round(f1, 4),
+        "confusion_matrix": cm.tolist()
+    }
+    with open("metrics.json", "w") as f:
+        json.dump(metrics, f, indent=4)
+
+    print("📑 Metrics saved to metrics.json")
 
 if __name__ == "__main__":
     main()

@@ -16,16 +16,16 @@ stages:
       - data/processed/train.parquet
       - data/processed/test.parquet
       - artifacts/train_feature_stats.json
-
+ 
   train:
-    cmd: python src/train_spark_mlflow.py --train data/processed/train.parquet --test data/processed/test.parquet
+    cmd: python src/train_spark_mlflow.py --train data/processed/train.parquet --test data/processed/test.parquet --outdir artifacts
     deps:
-      - src/train_spark_mlflow.py
       - data/processed/train.parquet
       - data/processed/test.parquet
-      - params.yaml
+      - src/train_spark_mlflow.py
     outs:
-      - artifacts/best_run.json
+      - artifacts/model.joblib
+
 
   evaluate:
     cmd: python src/evaluate.py --test data/processed/test.parquet

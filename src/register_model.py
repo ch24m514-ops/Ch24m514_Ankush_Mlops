@@ -1,24 +1,25 @@
-import json, mlflow
+import mlflow
+import json
+import os
 
 MODEL_NAME = "titanic_model"
 
 def main():
-    mlflow.set_tracking_uri("sqlite:///mlflow.db")
-    with open("artifacts/best_run.json") as f:
-        info = json.load(f)
+    # Load best run info
+    with open("artifacts/best_run.json", "r") as f:
+        best_run = json.load(f)
 
-    run_id = info["run_id"]
-    model_version = mlflow.register_model(model_uri=f"runs:/{run_id}/model", name=MODEL_NAME).version
-    print(f"Registered model version: {model_version}")
+    model_path = best_run["model_path"]  # local path to joblib
+    print(f"📂 Registering model from {model_path}")
 
-    # Transition to Production (archiving others)
-    client = mlflow.MlflowClient()
-    # Archive previous Production
-    for mv in client.search_model_versions(f"name='{MODEL_NAME}'"):
-        if mv.current_stage == "Production":
-            client.transition_model_version_stage(name=MODEL_NAME, version=mv.version, stage="Archived")
-    client.transition_model_version_stage(name=MODEL_NAME, version=model_version, stage="Production")
-    print(f"Model {MODEL_NAME} v{model_version} transitioned to Production.")
+    mlflow.set_tracking_uri("file:./mlruns")  # ensure consistent tracking dir
+    mlflow.set_experiment("titanic-mlops")
+
+    # Register the model directly from local path
+    model_uri = f"file://{os.path.abspath(model_path)}"
+    registered_model = mlflow.register_model(model_uri=model_uri, name=MODEL_NAME)
+
+    print(f"✅ Successfully registered model '{MODEL_NAME}' (version {registered_model.version})")
 
 if __name__ == "__main__":
     main()
