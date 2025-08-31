@@ -1,21 +1,18 @@
-# Core MLOps stack
-mlflow==2.16.0
-dvc[all]==3.59.0
-pyspark==3.5.2
-fastapi==0.115.0
-uvicorn[standard]==0.30.6
+# Core Dependencies
+pyspark==3.5.1
+scikit-learn==1.5.1
+pandas>=2.2.2
+numpy>=1.26.4
+joblib>=1.4.2
 
-# Data & ML
-pandas==2.2.3
-numpy==1.26.4
-scikit-learn==1.5.2
-matplotlib==3.9.2
-seaborn==0.13.2
-pyyaml==6.0.2
+# MLOps & Experiment Tracking
+mlflow>=2.14.0
+dvc>=3.50.2
 
-# Explicit pandas dependencies
-python-dateutil==2.9.0.post0
-pytz==2024.2
+# API & Serving
+fastapi>=0.111.0
+uvicorn>=0.30.0
 
-# For FastAPI models & validation
-pydantic==2.9.2
+# Utils & Dev
+python-dotenv>=1.0.1
+requests>=2.32.3
