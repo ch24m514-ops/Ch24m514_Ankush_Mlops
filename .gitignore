@@ -1,11 +1,57 @@
+# ----------------------------
+# Python
+# ----------------------------
 __pycache__/
 *.pyc
-mlruns/
-mlflow.db
-dvc_storage/
+*.pyo
+*.pyd
+*.pkl
+*.joblib
+
+# ----------------------------
+# Virtual Environments
+# ----------------------------
+.env
+.venv
+env/
+venv/
+mlops-env/
+*.egg-info/
+
+# ----------------------------
+# Jupyter Notebooks
+# ----------------------------
+.ipynb_checkpoints/
+
+# ----------------------------
+# Logs & Temp
+# ----------------------------
+*.log
+logs/
+tmp/
+temp/
+.DS_Store
+
+# ----------------------------
+# DVC
+# ----------------------------
+# DVC itself generates .dvc files, we keep those in git.
+# But we ignore actual data outputs since DVC tracks them separately.
 data/raw/
 data/processed/
-artifacts/preprocess_pipeline/
-artifacts/*.json
-*.DS_Store
-.env
+artifacts/
+metrics.json
+
+# ----------------------------
+# MLflow
+# ----------------------------
+mlruns/
+mlartifacts/
+
+# ----------------------------
+# System files
+# ----------------------------
+*.swp
+*.swo
+*.bak
+*.tmp

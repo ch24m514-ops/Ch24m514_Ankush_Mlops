@@ -59,20 +59,20 @@ stages:
       nfiles: 4
     - path: src/train_spark_mlflow.py
       hash: md5
-      md5: 712f42842849788f01e4af33837c07ba
-      size: 2469
+      md5: ad6438bfc79a93775d4f7b2c5f1a84fa
+      size: 2607
     outs:
     - path: artifacts/model.joblib
       hash: md5
-      md5: 7a0f5a6743c724611095443e907d8da8
-      size: 1183
+      md5: c177bf2edd1619a9eb442270c5c4c5f0
+      size: 2535705
   evaluate:
     cmd: python src/evaluate.py --test data/processed/test.parquet
     deps:
     - path: artifacts/best_run.json
       hash: md5
-      md5: d9df5876018f0920eac4b51507339b41
-      size: 241
+      md5: 04eef69342bfc12426c23eac9cf0bc0c
+      size: 392
     - path: data/processed/test.parquet
       hash: md5
       md5: 23de96c34f539e6389da2a336f2ac03e.dir
@@ -85,16 +85,16 @@ stages:
     outs:
     - path: metrics.json
       hash: md5
-      md5: 539373e65ee75f09b0123dda7cade3d2
+      md5: 2c97f977f464d464960994447512b584
       size: 186
   register:
     cmd: python src/register_model.py
     deps:
     - path: artifacts/best_run.json
       hash: md5
-      md5: d9df5876018f0920eac4b51507339b41
-      size: 241
+      md5: 04eef69342bfc12426c23eac9cf0bc0c
+      size: 392
     - path: src/register_model.py
       hash: md5
-      md5: 605d683dc8d655e41bbc51d7c40a5140
-      size: 761
+      md5: 72abc38914d8da371609095d0696c058
+      size: 1268

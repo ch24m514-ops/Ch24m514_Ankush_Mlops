@@ -1,71 +1,82 @@
 import argparse
 import os
-import pandas as pd
+import json
 import mlflow
 import mlflow.sklearn
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
 import joblib
-import json
+import numpy as np
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
+from pyspark.sql import SparkSession
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--train", required=True, help="Path to train parquet file")
-    parser.add_argument("--test", required=True, help="Path to test parquet file")
-    parser.add_argument("--outdir", required=True, help="Directory to save artifacts")
+    parser.add_argument("--train", required=True)
+    parser.add_argument("--test", required=True)
+    parser.add_argument("--outdir", required=True)
     args = parser.parse_args()
 
-    # ---- Load processed data ----
+    os.makedirs(args.outdir, exist_ok=True)
+
     print(f"📂 Loading train data from {args.train}")
-    train_df = pd.read_parquet(args.train)
-
     print(f"📂 Loading test data from {args.test}")
-    test_df = pd.read_parquet(args.test)
 
-    X_train = train_df.drop("Survived", axis=1)
-    y_train = train_df["Survived"]
-    X_test = test_df.drop("Survived", axis=1)
-    y_test = test_df["Survived"]
+    spark = SparkSession.builder.appName("Train Titanic Model").getOrCreate()
+    train_df = spark.read.parquet(args.train)
+    test_df = spark.read.parquet(args.test)
 
-    # ---- Train model ----
-    model = LogisticRegression(max_iter=1000)
-    model.fit(X_train, y_train)
+    train_pd = train_df.toPandas()
+    test_pd = test_df.toPandas()
 
-    # ---- Evaluate ----
-    y_pred = model.predict(X_test)
-    acc = accuracy_score(y_test, y_pred)
+    # Split features & labels
+    X_train = train_pd.drop("Survived", axis=1)
+    y_train = train_pd["Survived"]
+    X_test = test_pd.drop("Survived", axis=1)
+    y_test = test_pd["Survived"]
+
+    print("🚀 Training RandomForest model...")
+    clf = RandomForestClassifier(n_estimators=100, random_state=42)
+    clf.fit(X_train, y_train)
+
+    y_pred = clf.predict(X_test)
+    accuracy = accuracy_score(y_test, y_pred)
     f1 = f1_score(y_test, y_pred)
     cm = confusion_matrix(y_test, y_pred)
 
-    print(f"✅ Accuracy: {acc:.4f}, F1: {f1:.4f}")
+    print(f"✅ Accuracy: {accuracy:.4f}, F1: {f1:.4f}")
     print("Confusion Matrix:\n", cm)
 
-    # ---- Log with MLflow ----
+    # --- MLflow Tracking ---
     mlflow.set_experiment("titanic-mlops")
     with mlflow.start_run() as run:
-        mlflow.log_param("model", "LogisticRegression")
-        mlflow.log_metric("accuracy", acc)
+        mlflow.log_param("model", "RandomForestClassifier")
+        mlflow.log_metric("accuracy", accuracy)
         mlflow.log_metric("f1_score", f1)
-        mlflow.sklearn.log_model(model, "model")
+        mlflow.sklearn.log_model(clf, "model")
 
-        # ---- Save model locally ----
-        os.makedirs(args.outdir, exist_ok=True)
-        model_path = os.path.join(args.outdir, "model.joblib")
-        joblib.dump(model, model_path)
-        print(f"📦 Model saved to {model_path}")
+        run_id = run.info.run_id
+        model_uri = f"runs:/{run_id}/model"
 
-        # ---- Save best run metadata for evaluate stage ----
-        best_run_info = {
-            "run_id": run.info.run_id,
-            "experiment_id": mlflow.get_experiment_by_name("titanic-mlops").experiment_id,
-            "metrics": {"accuracy": acc, "f1_score": f1},
-            "model_path": model_path
-        }
-        best_run_path = os.path.join(args.outdir, "best_run.json")
-        with open(best_run_path, "w") as f:
-            json.dump(best_run_info, f, indent=4)
+    # --- Save model locally ---
+    model_path = os.path.join(args.outdir, "model.joblib")
+    joblib.dump(clf, model_path)
+    print(f"📦 Model saved to {model_path}")
 
-        print(f"📝 Best run info saved to {best_run_path}")
+    # --- Save metadata for evaluate.py ---
+    best_run_info = {
+        "accuracy": accuracy,
+        "f1": f1,
+        "confusion_matrix": cm.tolist(),
+        "model_path": os.path.abspath(model_path),  # ✅ for joblib loading
+        "model_uri": model_uri,                     # ✅ for MLflow loading
+        "run_id": run_id
+    }
+
+    with open(os.path.join(args.outdir, "best_run.json"), "w") as f:
+        json.dump(best_run_info, f, indent=4)
+
+    print("📝 Best run info saved to artifacts/best_run.json")
+
 
 if __name__ == "__main__":
     main()
